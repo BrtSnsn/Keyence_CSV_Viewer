@@ -2,8 +2,10 @@ import streamlit as st
 import pandas as pd
 import re
 from io import BytesIO
-import numpy as np
+# import numpy as np
 import plotly.express as px
+from bokeh.plotting import figure
+from bokeh.models import ColumnDataSource
 
 st.set_page_config(
     page_title="Keyence quick loadout",
@@ -16,8 +18,8 @@ makeupdf = pd.DataFrame([])
 
 config = {'displayModeBar': True}
 
-datafr = st.checkbox('interactieve dataframe?')
-extra = st.checkbox('grafieken?')
+datafr = st.checkbox('interactieve dataframe? --> als dit te groot is dan kost dit veel geheugen')
+extra = st.checkbox('grafieken? -> zouden altijd ok moeten zijn tenzij in combo met bovenstaande dataframe')
 
 selector_slot = st.empty()
 c1, c2 = st.columns(2)
@@ -114,7 +116,7 @@ if csv is not None:
 
                 selector = selector_slot.selectbox('kies boxplot', dfcopy.columns)
 
-                with graph_slot:
+                with graph2_slot:
                 # with graph_slot.form('dfdf'):
                     fig = px.box(
                     data_frame=dfcopy,
@@ -127,34 +129,44 @@ if csv is not None:
                     st.plotly_chart(fig, use_container_width=True)
                     # st.form_submit_button('update this graph')
 
-                with graph2_slot:
-                    fig = px.line(
-                    data_frame=df_result.iloc[3:, :],
-                    y = selector,
-                    markers='.'
-                    # template='plotly_white'
-                        )
-                    st.plotly_chart(fig, use_container_width=True)
+                st.write(dfcopy)
+                with graph_slot:
+                # with graph_slot.form('dfdf'):
+                    # selector = st.selectbox('kies boxplot', dfcopy.columns)
 
+            #     fig = px.line(
+            #     data_frame=df_result.iloc[3:, :],
+            #     y = selector,
+            #     markers='.'
+            #     # template='plotly_white'
+            #         )
+            #     st.plotly_chart(fig, use_container_width=True)
+                    source = ColumnDataSource(data=dfcopy)
+                    # st.write(source)
+
+                    TOOLTIPS = [
+                        ("index", "$index"),
+                        ("(x,y)", "($x, $y)"),
+                        ]
+
+                    p = figure(
+                        title='simple line example',
+                        # x_axis_label='x',
+                        y_axis_label='value',
+                        tooltips=TOOLTIPS)
+                    
+                    p.line(x='index', y=selector, source=source, line_width=2)
+                    # p.line(x='index', y='CT02', source=source, line_width=2)
+
+                    st.bokeh_chart(p, use_container_width=True)
+
+                    # st.form_submit_button('update this graph')
 
         except Exception as e:
             msgbox.write(e)
             msgbox.write('Dit is de laatste dataframe die wel werkte')
             msgbox.write(df_result)
 
-# @st.cache
-# def convert_df(df):
-#     return df.to_excel('large_df.xls', engine='xlsxwriter')
-
-# # https://stackoverflow.com/questions/67564627/how-to-download-excel-file-in-python-and-streamlit
-
-# if makeupdf:
-#     data = convert_df(df_result)
-#     but = st.download_button(
-#         label="Download data",
-#         data=data,
-#         file_name='large_df.xls',
-#         )
 if csv:
     @st.cache
     def to_excel(df):
@@ -170,6 +182,3 @@ if csv:
                                     data=to_excel(makeupdf) ,
                                     file_name= f'{csv.name[:-4]}_colored.xlsx',
                                     mime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-
-# # https://stackoverflow.com/questions/69520000/streamlit-how-to-let-users-download-an-excel-file-from-the-app
-# st.download_button(label = 'Download', data = df_xlsx, file_name = 'filename.xlsx', mime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') 

@@ -4,8 +4,11 @@ import re
 from io import BytesIO
 # import numpy as np
 import plotly.express as px
+import plotly.graph_objects as go
 from bokeh.plotting import figure
 from bokeh.models import ColumnDataSource
+from bokeh.transform import factor_cmap, factor_mark
+import plotly.figure_factory as ffact
 
 st.set_page_config(
     page_title="Keyence quick loadout",
@@ -22,12 +25,11 @@ datafr = st.checkbox('interactieve dataframe? --> als dit te groot is dan kost d
 extra = st.checkbox('grafieken? -> zouden altijd ok moeten zijn tenzij in combo met bovenstaande dataframe')
 
 selector_slot = st.empty()
-c1, c2 = st.columns(2)
+c1, c2, c3 = st.columns(3)
 
-graph_slot = c1.empty()
-
-selector2_slot = c2.empty()
+graph1_slot = c1.empty()
 graph2_slot = c2.empty()
+graph3_slot = c3.empty()
 
 msgbox = st.container()
 
@@ -69,8 +71,11 @@ if csv is not None:
             df_tol.loc[:, 'Serial Counter'] = ['0101991200', '0101991201', '0101991202']
             df_result = pd.concat([df_tol, df], axis=0)
             df_result.reset_index(inplace=True, drop=True)
-            df_result = df_result.loc[:, ~df_result.columns.isin(['Program name', 'Measurement time', 'Lot No.', 'Judgment', 'Name', 'Number '])]
+            df_result = df_result.loc[:, ~df_result.columns.isin(['Program name', 'Measurement time', 'Judgment', 'Name', 'Number '])]
+            dfcopy = df_result.copy()
+            df_result = df_result.loc[:, ~df_result.columns.isin(['Lot No.'])]
             df_result.set_index('Serial Counter', inplace=True)
+            dfcopy.set_index('Serial Counter', inplace=True)
 
 
             def makeuphelper(x):
@@ -97,16 +102,16 @@ if csv is not None:
                 st.dataframe(makeupdf)
 
             if extra:
-                dfcopy = df_result.copy()
                 datestring = makeupdf.index.astype(str).str[-10:]
                 dfcopy.loc[:, 'DateTime'] = pd.to_datetime(datestring, format='%d%m%y%H%M', dayfirst=True)
                 dfcopy.loc[:, 'OsNos'] = makeupdf.index.astype(str).str[:-10]
 
-                ff = pd.MultiIndex.from_frame(dfcopy.loc[:, ['DateTime', 'OsNos']])
+                ff = pd.MultiIndex.from_frame(dfcopy.loc[:, ['DateTime', 'OsNos', 'Lot No.']])
                 # dfcopy = dfcopy.
-                # st.write(datestring)
+                # st.write(dfcopy)
                 # dfcopy = dfcopy.set_index(dfcopy.loc[:, 'DateTime'])
                 dfcopy = dfcopy.set_index(ff).sort_index(ascending=True).reset_index(drop=True)
+                # dfcopy = dfcopy.set_index(ff).sort_index(ascending=True)
                 dfcopy = dfcopy.drop('DateTime', axis=1)
                 dfcopy = dfcopy.drop('OsNos', axis=1)
                 dfcopy = dfcopy.iloc[3:, :]
@@ -114,53 +119,80 @@ if csv is not None:
                 # st.write(ff)
 
 
-                selector = selector_slot.selectbox('kies boxplot', dfcopy.columns)
+                selector = selector_slot.selectbox('kies boxplot', dfcopy.columns[1:])
 
-                with graph2_slot:
-                # with graph_slot.form('dfdf'):
+                mean = dfcopy.loc[:, selector].median()
+                stdev = dfcopy.loc[:, selector].std()
+                up = mean + 3 * stdev
+                down = mean - 3 * stdev
+                if down < 0:
+                    down = 0
+
+                with graph1_slot:
                     fig = px.box(
                     data_frame=dfcopy,
-                    x = selector,
-                    title='this is your keyence data',
-                    points='all'
-                    # markers='.'
-                    # template='plotly_white'
-                        )
-                    st.plotly_chart(fig, use_container_width=True)
-                    # st.form_submit_button('update this graph')
-
-                st.write(dfcopy)
-                with graph_slot:
-                # with graph_slot.form('dfdf'):
-                    # selector = st.selectbox('kies boxplot', dfcopy.columns)
-
-            #     fig = px.line(
-            #     data_frame=df_result.iloc[3:, :],
-            #     y = selector,
-            #     markers='.'
-            #     # template='plotly_white'
-            #         )
-            #     st.plotly_chart(fig, use_container_width=True)
-                    source = ColumnDataSource(data=dfcopy)
-                    # st.write(source)
-
-                    TOOLTIPS = [
-                        ("index", "$index"),
-                        ("(x,y)", "($x, $y)"),
-                        ]
-
-                    p = figure(
-                        title='simple line example',
-                        # x_axis_label='x',
-                        y_axis_label='value',
-                        tooltips=TOOLTIPS)
+                    y = selector,
+                    title=selector,
+                    # facet_col='Lot No.',
+                    color='Lot No.')
                     
-                    p.line(x='index', y=selector, source=source, line_width=2)
-                    # p.line(x='index', y='CT02', source=source, line_width=2)
+                    fig.add_hline(y=mean, line_width=0.5, line_dash="dash", line_color="black", opacity=0.7)
+                    fig.add_hline(y=up, line_width=1, line_dash="dash", line_color="red", opacity=0.7)
+                    fig.add_hline(y=down, line_width=1, line_dash="dash", line_color="red", opacity=0.7)
+                    st.plotly_chart(fig, use_container_width=True)
 
-                    st.bokeh_chart(p, use_container_width=True)
+                with graph2_slot:
+                    fig = px.line(
+                        data_frame=dfcopy,
+                        y = selector,
+                        markers='.',
+                        color='Lot No.',
+                        title=selector)
+                    fig.add_hline(y=mean, line_width=0.5, line_dash="dash", line_color="black", opacity=0.7)
+                    fig.add_hline(y=up, line_width=1, line_dash="dash", line_color="red", opacity=0.7)
+                    fig.add_hline(y=down, line_width=1, line_dash="dash", line_color="red", opacity=0.7)
+                    st.plotly_chart(fig, use_container_width=True)
 
-                    # st.form_submit_button('update this graph')
+                # st.write(dfcopy)
+
+                dfcopy = dfcopy.drop('Lot No.', axis=1)
+                dfcopy = dfcopy.dropna()
+
+                with graph3_slot:
+                    fig = ffact.create_distplot([dfcopy[selector].to_list()], [selector], bin_size=0.1, curve_type='normal')
+                    
+                    # fig = ffact.create_distplot([dfcopy[c] for c in dfcopy.columns], dfcopy.columns, bin_size=.25)
+                    fig.add_vline(x=mean, line_width=0.5, line_dash="dash", line_color="black", opacity=0.7)
+                    fig.add_vline(x=up, line_width=1, line_dash="dash", line_color="red", opacity=0.7)
+                    fig.add_vline(x=down, line_width=1, line_dash="dash", line_color="red", opacity=0.7)
+                    st.plotly_chart(fig, use_container_width=True)
+
+                # bokeh graph , maar de colormap is niet super goed vindk
+                # with graph_slot:
+                #     source = ColumnDataSource(data=dfcopy)
+                #     # st.write(source)
+
+                #     TOOLTIPS = [
+                #         ("index", "$index"),
+                #         ("(x,y)", "($x, $y)"),
+                #         # ("Lot No", "($Lot No.)")
+                #         ]
+
+                #     p = figure(
+                #         title=selector,
+                #         # x_axis_label='x',
+                #         y_axis_label='value',
+                #         tooltips=TOOLTIPS)
+                #     st.write(dfcopy.loc[:, 'Lot No.'])
+                #     SPECIES = dfcopy.loc[:, 'Lot No.']
+                #     p.line(x='index', y=selector, source=source, line_width=2)
+                #     p.circle(x='index', y=selector, source=source, color=factor_cmap('Lot No.', 'Turbo256', SPECIES), size=10)
+                #     # p.circle([1, 2, 3, 4, 5], [6, 7, 2, 4, 5], size=20, color="navy", alpha=0.5)
+                #     # p.line(x='index', y='CT02', source=source, line_width=2)
+
+                #     st.bokeh_chart(p, use_container_width=True)
+
+                #     # st.form_submit_button('update this graph')
 
         except Exception as e:
             msgbox.write(e)
